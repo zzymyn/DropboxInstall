@@ -1,0 +1,7 @@
+155,157c155,156
+<     my @codesign_args = ("/usr/bin/codesign", "--force", "--preserve-metadata=identifier,entitlements,resource-rules",
+<                          "--sign", $opt{sign},
+<                          "--resource-rules=$destApp/ResourceRules.plist");
+---
+>     my @codesign_args = ("/usr/bin/codesign", "--force", "--preserve-metadata=identifier,entitlements",
+>                          "--sign", $opt{sign});

@@ -1,0 +1,98 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AdHoc Install</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style type="text/css">
+    html {
+      margin: 0;
+      padding: 0;
+      background-color: #eee;
+      font-family: -apple-system, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+    }
+
+    div.app-header {
+      display: table;
+      border-collapse: collapse;
+      width: 100%;
+      border-bottom: 1px solid #aaa;
+      overflow: auto;
+    }
+
+    h1 {
+      display: table-cell;
+      font-size: 24px;
+      text-align: left;
+      vertical-align: middle;
+      width: 100%;
+      padding: 10px;
+    }
+
+    .icon {
+      display: table-cell;
+      width: 120px;
+      height: 120px;
+      padding: 10px;
+    }
+
+    h2 {
+      margin: 9pt;
+      padding: 0;
+      font-size: 20px;
+    }
+
+    p {
+      margin: 8pt;
+      padding: 0;
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-header">
+    <h1>${Title}</h1>
+    <svg class="icon" viewBox="0 0 200 200">
+      <defs>
+        <pattern id="squircle" patternUnits="userSpaceOnUse" width="200" height="200">
+          <image xlink:href="${IconUrl}" x="0" y="0" width="200" height="200" />
+        </pattern>
+      </defs>
+      <path d="M100,200c43.8,0,68.2,0,84.1-15.9C200,168.2,200,143.8,200,100s0-68.2-15.9-84.1C168.2,0,143.8,0,100,0S31.8,0,15.9,15.9C0,31.8,0,56.2,0,100s0,68.2,15.9,84.1C31.8,200,56.2,200,100,200z" fill="url(#squircle)" />
+    </svg>
+  </div>
+  <h2>Download</h2>
+  <p>
+    <a id="downloadLink" href="itms-services://?action=download-manifest&amp;url=${EscapedManifestUrl}">
+      Download ${Title} ${BundleVersion} (${IpaSize})
+    </a>
+  </p>
+  <div id="downloadInfo">
+    <p>
+      Your download will begin soon...
+    </p>
+    <p>
+      You will be prompted to install the game. After pressing "Install" press your home button to find the app.
+    </p>
+  </div>
+  <h2>About</h2>
+  <p>${About}</p>
+  <script>
+    var dlLink = document.getElementById('downloadLink');
+    var dlInfo = document.getElementById('downloadInfo');
+
+    dlInfo.hidden = true;
+
+    dlLink.addEventListener('click', function ()
+    {
+      dlLink.hidden = true;
+      dlInfo.hidden = false;
+    });
+  </script>
+</body>
+</html>
