@@ -20,13 +20,14 @@ OUTPUT_IPA = "Output.ipa"
 ICON_PNG = "Icon.png"
 MANIFEST_PLIST = "manifest.plist"
 INDEX_HTML = "index.html"
+DEFAULT_DROPBOX_ROOT = "/AdHocBuilds"
 
 def requireFile(path, errordesc, extraError = None):
     if not os.path.isfile(path):
         print "Error: " + errordesc + " not a file."
         print "  path = " + path
         if extraError is not None:
-            print "       " + extraError
+            print "  " + extraError
         sys.exit(1)
 
 def requireDir(path, errordesc, extraError = None):
@@ -34,7 +35,7 @@ def requireDir(path, errordesc, extraError = None):
         print "Error: " + errordesc + " not a directory."
         print "  path = " + path
         if extraError is not None:
-            print "       " + extraError
+            print "  " + extraError
         sys.exit(1)
 
 def requireMatch(pattern, string, errordesc):
@@ -85,7 +86,7 @@ def findSigningIdentity():
     output = subprocess.check_output(["security", "find-identity", "-v", "-p", "codesigning"])
     match = re.search(r"iPhone Distribution: .* \(.*\)", output)
     if match is None:
-        print "Error: Failed to find signing identity."
+        print "Error: Failed to automatically find signing identity."
         sys.exit(1)
     return match.group(0)
 
@@ -94,14 +95,14 @@ def findMobileProvision(profileName):
         name = getMobileProvisionPlistValue(mobileprovision, ":Name")
         if name == profileName:
             return mobileprovision
-    print "Error: Failed to find mobile provision."
+    print "Error: Failed to automatically find mobile provision."
     sys.exit(1)
 
 class DropboxUploader:
     def __init__(self, uploaderDir):
         self.script = os.path.join(uploaderDir, "dropbox_uploader.sh")
         requireFile(self.script, "Dropbox uploader script")
-        requireFile(os.path.expanduser("~/.dropbox_uploader"), "Dropbox uploader config file", "Please run: " + self.script)
+        requireFile(os.path.expanduser("~/.dropbox_uploader"), "Dropbox uploader config file", "Please run " + self.script + "to set up dropbox_uploader. The 'App permission' mode is recommended.")
 
     def upload(self, source, dest):
         subprocess.check_call([self.script, "upload", source, dest])
@@ -138,16 +139,6 @@ def run(args):
     requireFile(bundleInfoPlist, "Bundle Info.plist")
     requireFile(bundleEmbeddedMobileProvision, "Bundle embedded.mobileprovision")
 
-    print "Preparing..."
-
-    print "  Creating our own PackageApplication..."
-    shutil.copy(PACKAGE_APPLICATION, packageApplication)
-    subprocess.check_output(["patch", packageApplication, packageApplicationPatch])
-    print "    " + packageApplication
-
-    print "    done"
-    print "  done"
-
     print "Gathering Info..."
 
     bundleIdentifier = getPlistValue(bundleInfoPlist, ":CFBundleIdentifier")
@@ -167,7 +158,8 @@ def run(args):
     print "  Bundle Identifier = " + bundleIdentifier
     print "  Bundle Version = " + bundleVersion
     print "  Bundle Name = " + bundleDisplayName
-
+    print "  Best Icon = " + os.path.basename(iconTarget)
+    print "  Dropbox Target = " + dropboxRoot
     print "  done"
 
     print "Checking App..."
@@ -181,13 +173,24 @@ def run(args):
 
     print "Determining (re)signing info..."
 
-    signingIdentity = findSigningIdentity()
+    if args.signing_identity is not None:
+        signingIdentity = args.signing_identity
+    else:
+        signingIdentity = findSigningIdentity()
     print "  Signing Identity = " + signingIdentity
 
-    mobileprovision = findMobileProvision("XC Ad Hoc: " + bundleIdentifier)
+    if args.mobile_provision is not None:
+        mobileprovision = args.mobile_provision
+    else:
+        mobileprovision = findMobileProvision("XC Ad Hoc: " + bundleIdentifier)
     print "  Mobile Provision = " + mobileprovision
 
+    if args.check_only:
+        return
+
     print "Packaging application..."
+    shutil.copy(PACKAGE_APPLICATION, packageApplication)
+    subprocess.check_output(["patch", packageApplication, packageApplicationPatch])
     subprocess.check_call([packageApplication, bundlePath, "-s", signingIdentity, "-o", ipaTarget, "--embed", mobileprovision])
     print "  done"
 
@@ -232,12 +235,30 @@ def run(args):
 
 if __name__ == "__main__":
     try:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--dropbox-root", default = "/AdHoc Builds", help = "Path in DropBox to put builds.")
-        parser.add_argument("bundle", help = "Path to .app bundle.")
-        args = parser.parse_args()
-        print args
         tmpDir = tempfile.mkdtemp()
+        parser = argparse.ArgumentParser(
+            description = "Upload AdHoc iPhone builds to Dropbox, for OTA installation on devices."
+            )
+        parser.add_argument(
+            "--check-only",
+            action = "store_const",
+            const = True,
+            default = False,
+            help = "Only perform checks, don't upload anything.")
+        parser.add_argument(
+            "--dropbox-root",
+            default = DEFAULT_DROPBOX_ROOT,
+            help = "Path in DropBox to put builds. This path is either relative to your Dropbox root or the uploader's folder in Apps depending on how you have set up dropbox_uploader. (Default: %(default)s)")
+        parser.add_argument(
+            "-s", "--signing-identity",
+            help = "Signing identify to use when signing the IPA file. If not supplied the program will try to automatically find one.")
+        parser.add_argument(
+            "--mobile-provision",
+            help = "Path to mobile provision to embed within the IPA file. If not supplied the problem will try to automatically find one.")
+        parser.add_argument(
+            "bundle",
+            help = "Path to built .app bundle.")
+        args = parser.parse_args()
         run(args)
     finally:
         shutil.rmtree(tmpDir)
