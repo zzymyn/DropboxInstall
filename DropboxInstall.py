@@ -11,8 +11,6 @@ import tempfile
 import shutil
 import urllib
 
-tmpDir = None
-
 PLIST_BUDDY = "/usr/libexec/PlistBuddy"
 MOBILE_PROVISIONS = "~/Library/MobileDevice/Provisioning Profiles/*.mobileprovision"
 PACKAGE_APPLICATION = "/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/PackageApplication"
@@ -22,28 +20,51 @@ MANIFEST_PLIST = "manifest.plist"
 INDEX_HTML = "index.html"
 DEFAULT_DROPBOX_ROOT = "/AdHocBuilds"
 
+tmpDir = None
+log = None
+
+class Logger:
+    def __init__(self, quiet):
+        self.quiet = quiet
+
+    def e(self, *args):
+        self._write(sys.stderr, args)
+
+    def v(self, *args):
+        if not self.quiet:
+            self._write(sys.stdout, args)
+
+    def o(self, *args):
+        self._write(sys.stdout, args)
+
+    def _write(self, stream, args):
+        for a in args:
+            stream.write(str(a))
+        stream.write("\n")
+        stream.flush()
+
 def requireFile(path, errordesc, extraError = None):
     if not os.path.isfile(path):
-        print "Error: " + errordesc + " not a file."
-        print "  path = " + path
+        log.e("Error: ", errordesc, " not a file.")
+        log.e("  path = ", path)
         if extraError is not None:
-            print "  " + extraError
+            log.e("  ", extraError)
         sys.exit(1)
 
 def requireDir(path, errordesc, extraError = None):
     if not os.path.isdir(path):
-        print "Error: " + errordesc + " not a directory."
-        print "  path = " + path
+        log.e("Error: ", errordesc, " not a directory.")
+        log.e("  path = ", path)
         if extraError is not None:
-            print "  " + extraError
+            log.e("  ", extraError)
         sys.exit(1)
 
 def requireMatch(pattern, string, errordesc):
     m = re.match(pattern, string)
     if m is None:
-        print "Error: " + errordesc + " does not match expected pattern."
-        print "  value = " + string
-        print "  pattern = " + pattern
+        log.e("Error: ", errordesc, " does not match expected pattern.")
+        log.e("  value = ", string)
+        log.e("  pattern = ", pattern)
         sys.exit(1)
 
 def getPlistValue(path, key):
@@ -86,7 +107,7 @@ def findSigningIdentity():
     output = subprocess.check_output(["security", "find-identity", "-v", "-p", "codesigning"])
     match = re.search(r"iPhone Distribution: .* \(.*\)", output)
     if match is None:
-        print "Error: Failed to automatically find signing identity."
+        log.e("Error: Failed to automatically find signing identity.")
         sys.exit(1)
     return match.group(0)
 
@@ -95,7 +116,7 @@ def findMobileProvision(profileName):
         name = getMobileProvisionPlistValue(mobileprovision, ":Name")
         if name == profileName:
             return mobileprovision
-    print "Error: Failed to automatically find mobile provision."
+    log.e("Error: Failed to automatically find mobile provision.")
     sys.exit(1)
 
 class DropboxUploader:
@@ -105,7 +126,7 @@ class DropboxUploader:
         requireFile(os.path.expanduser("~/.dropbox_uploader"), "Dropbox uploader config file", "Please run " + self.script + "to set up dropbox_uploader. The 'App permission' mode is recommended.")
 
     def upload(self, source, dest):
-        subprocess.check_call([self.script, "upload", source, dest])
+        subprocess.check_output([self.script, "upload", source, dest])
 
     def share(self, path):
         return subprocess.check_output([self.script, "share", path]).strip().replace("?dl=0", "").replace("www.dropbox.com", "dl.dropboxusercontent.com")
@@ -139,7 +160,7 @@ def run(args):
     requireFile(bundleInfoPlist, "Bundle Info.plist")
     requireFile(bundleEmbeddedMobileProvision, "Bundle embedded.mobileprovision")
 
-    print "Gathering Info..."
+    log.v("Gathering Info...")
 
     bundleIdentifier = getPlistValue(bundleInfoPlist, ":CFBundleIdentifier")
     requireMatch(r"^\w+(\.\w+)*$", bundleIdentifier, "Bundle Identifier")
@@ -155,54 +176,53 @@ def run(args):
     manifestDropboxTarget = os.path.join(dropboxRoot, MANIFEST_PLIST)
     indexDropboxTarget = os.path.join(dropboxRoot, INDEX_HTML)
 
-    print "  Bundle Identifier = " + bundleIdentifier
-    print "  Bundle Version = " + bundleVersion
-    print "  Bundle Name = " + bundleDisplayName
-    print "  Best Icon = " + os.path.basename(iconTarget)
-    print "  Dropbox Target = " + dropboxRoot
-    print "  done"
+    log.v("  Bundle Identifier = ", bundleIdentifier)
+    log.v("  Bundle Version = ", bundleVersion)
+    log.v("  Bundle Name = ", bundleDisplayName)
+    log.v("  Best Icon = ", os.path.basename(iconTarget))
+    log.v("  Dropbox Target = ", dropboxRoot)
+    log.v("  done")
 
-    print "Checking App..."
+    log.v("Checking App...")
 
     if getMobileProvisionPlistValue(bundleEmbeddedMobileProvision, ":Entitlements:aps-environment") != "production":
-        print "Error: Not a production environment app."
-        print "       Make sure you build with an 'iOS Distribution' code-signing identity"
+        log.e("Error: Not a production environment app.")
+        log.e("       Make sure you build with an 'iOS Distribution' code-signing identity")
         sys.exit(1)
 
-    print "  done"
+    log.v("  done")
 
-    print "Determining (re)signing info..."
+    log.v("Determining (re)signing info...")
 
     if args.signing_identity is not None:
         signingIdentity = args.signing_identity
     else:
         signingIdentity = findSigningIdentity()
-    print "  Signing Identity = " + signingIdentity
+    log.v("  Signing Identity = ", signingIdentity)
 
     if args.mobile_provision is not None:
         mobileprovision = args.mobile_provision
     else:
         mobileprovision = findMobileProvision("XC Ad Hoc: " + bundleIdentifier)
-    print "  Mobile Provision = " + mobileprovision
+    log.v("  Mobile Provision = ", mobileprovision)
 
     if args.check_only:
         return
 
-    print "Packaging application..."
+    log.v("Packaging application...")
     shutil.copy(PACKAGE_APPLICATION, packageApplication)
     subprocess.check_output(["patch", packageApplication, packageApplicationPatch])
     subprocess.check_call([packageApplication, bundlePath, "-s", signingIdentity, "-o", ipaTarget, "--embed", mobileprovision])
-    print "  done"
+    log.v("  done")
 
-    print "Uploading IPA to Dropbox..."
+    log.v("Uploading IPA to Dropbox...")
     dropboxUploader.upload(ipaTarget, ipaDropboxTarget)
     ipaDropboxUrl = dropboxUploader.share(ipaDropboxTarget)
     dropboxUploader.upload(iconTarget, iconDropboxTarget)
     iconDropboxUrl = dropboxUploader.share(iconDropboxTarget)
-    print "  IPA URL = " + ipaDropboxUrl
-    print "  done"
+    log.v("  done")
 
-    print "Creating manifest..."
+    log.v("Creating manifest...")
     with open(manifestTemplate, "r") as fIn:
         with open(manifestTarget, "w") as fOut:
             fOut.write(string.Template(fIn.read()).safe_substitute(
@@ -214,10 +234,9 @@ def run(args):
                 ))
     dropboxUploader.upload(manifestTarget, manifestDropboxTarget)
     manifestDropboxUrl = dropboxUploader.share(manifestDropboxTarget)
-    print "  Manifest URL = " + manifestDropboxUrl
-    print "  done"
+    log.v("  done")
 
-    print "Creating index..."
+    log.v("Creating index...")
     with open(indexTemplate, "r") as fIn:
         with open(indexTarget, "w") as fOut:
             fOut.write(string.Template(fIn.read()).safe_substitute(
@@ -230,8 +249,10 @@ def run(args):
                 ))
     dropboxUploader.upload(indexTarget, indexDropboxTarget)
     indexDropboxUrl = dropboxUploader.share(indexDropboxTarget)
-    print "  Index URL = " + indexDropboxUrl
-    print "  done"
+    log.v("  done")
+    log.v("")
+    log.v("Link to OTA install page:")
+    log.o(indexDropboxUrl)
 
 if __name__ == "__main__":
     try:
@@ -256,9 +277,18 @@ if __name__ == "__main__":
             "--mobile-provision",
             help = "Path to mobile provision to embed within the IPA file. If not supplied the problem will try to automatically find one.")
         parser.add_argument(
+            "-q", "--quiet",
+            action = "store_const",
+            const = True,
+            default = False,
+            help = "Supress all output except the final HTML URL.")
+        parser.add_argument(
             "bundle",
             help = "Path to built .app bundle.")
+
         args = parser.parse_args()
+        log = Logger(args.quiet)
+
         run(args)
     finally:
         shutil.rmtree(tmpDir)
