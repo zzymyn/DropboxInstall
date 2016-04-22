@@ -126,10 +126,10 @@ class DropboxUploader:
         requireFile(os.path.expanduser("~/.dropbox_uploader"), "Dropbox uploader config file", "Please run " + self.script + "to set up dropbox_uploader. The 'App permission' mode is recommended.")
 
     def upload(self, source, dest):
-        subprocess.check_output([self.script, "upload", source, dest])
+        subprocess.check_call([self.script, "-q", "upload", source, dest])
 
     def share(self, path):
-        return subprocess.check_output([self.script, "share", path]).strip().replace("?dl=0", "").replace("www.dropbox.com", "dl.dropboxusercontent.com")
+        return subprocess.check_output([self.script, "-q", "share", path]).strip().replace("?dl=0", "").replace("www.dropbox.com", "dl.dropboxusercontent.com")
 
 def run(args):
     scriptDir = os.path.dirname(sys.argv[0])
