@@ -69,7 +69,8 @@ def requireMatch(pattern, string, errordesc):
 
 def getPlistValue(path, key):
     try:
-        return subprocess.check_output([PLIST_BUDDY, "-c", "Print " + key, path]).strip()
+        with open(os.devnull, 'w') as devnull:
+            return subprocess.check_output([PLIST_BUDDY, "-c", "Print " + key, path], stderr = devnull).strip()
     except:
         return ""
 
@@ -103,21 +104,32 @@ def findBestIcon(bundlePath, bundleInfoPlist):
                             bestSize = iconSize
     return bestIcon
 
-def findSigningIdentity():
+def findSigningIdentity(teamIdentifier):
     output = subprocess.check_output(["security", "find-identity", "-v", "-p", "codesigning"])
-    match = re.search(r"iPhone Distribution: .* \(.*\)", output)
+    match = re.search(r"iPhone Distribution: .* \(" + teamIdentifier + "\)", output)
     if match is None:
         log.e("Error: Failed to automatically find signing identity.")
         sys.exit(1)
     return match.group(0)
 
-def findMobileProvision(profileName):
+def findMobileProvisionAndSigningIdentity(bundleIdentifier):
     for mobileprovision in glob.iglob(os.path.expanduser(MOBILE_PROVISIONS)):
-        name = getMobileProvisionPlistValue(mobileprovision, ":Name")
-        if name == profileName:
-            return mobileprovision
-    log.e("Error: Failed to automatically find mobile provision.")
-    sys.exit(1)
+        tmpFile = os.path.join(tmpDir, "tmp.plist")
+        if not writeMobileProvisionPList(mobileprovision, tmpFile):
+            continue
+        mpBundleId = getPlistValue(tmpFile, ":Entitlements:application-identifier")
+        mpTeamId = getPlistValue(tmpFile, ":TeamIdentifier:0")
+        if mpTeamId + "." + bundleIdentifier != mpBundleId:
+            continue
+        if getPlistValue(tmpFile, ":Platform:0") != "iOS":
+            continue
+        if getPlistValue(tmpFile, ":Entitlements:get-task-allow") == "true":
+            continue
+        if getPlistValue(tmpFile, ":ProvisionedDevices") == "":
+            continue
+        signingIdentity = findSigningIdentity(mpTeamId)
+        return (mobileprovision, signingIdentity)
+    return (None, None)
 
 class DropboxUploader:
     def __init__(self, uploaderDir):
@@ -184,26 +196,18 @@ def run(args):
     log.v("  done")
 
     log.v("Checking App...")
-
-    if getMobileProvisionPlistValue(bundleEmbeddedMobileProvision, ":Entitlements:aps-environment") != "production":
-        log.e("Error: Not a production environment app.")
-        log.e("       Make sure you build with an 'iOS Distribution' code-signing identity")
-        sys.exit(1)
-
     log.v("  done")
 
     log.v("Determining (re)signing info...")
 
+    (mobileprovision, signingIdentity) = findMobileProvisionAndSigningIdentity(bundleIdentifier)
+
     if args.signing_identity is not None:
         signingIdentity = args.signing_identity
-    else:
-        signingIdentity = findSigningIdentity()
     log.v("  Signing Identity = ", signingIdentity)
 
     if args.mobile_provision is not None:
         mobileprovision = args.mobile_provision
-    else:
-        mobileprovision = findMobileProvision("XC Ad Hoc: " + bundleIdentifier)
     log.v("  Mobile Provision = ", mobileprovision)
 
     if args.check_only:
