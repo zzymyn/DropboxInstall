@@ -195,9 +195,6 @@ def run(args):
     log.v("  Dropbox Target = ", dropboxRoot)
     log.v("  done")
 
-    log.v("Checking App...")
-    log.v("  done")
-
     log.v("Determining (re)signing info...")
 
     (mobileprovision, signingIdentity) = findMobileProvisionAndSigningIdentity(bundleIdentifier)
