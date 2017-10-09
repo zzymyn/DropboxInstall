@@ -13,7 +13,6 @@ import urllib
 
 PLIST_BUDDY = "/usr/libexec/PlistBuddy"
 MOBILE_PROVISIONS = "~/Library/MobileDevice/Provisioning Profiles/*.mobileprovision"
-PACKAGE_APPLICATION = "/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/PackageApplication"
 OUTPUT_IPA = "Output.ipa"
 ICON_PNG = "Icon.png"
 MANIFEST_PLIST = "manifest.plist"
@@ -76,7 +75,7 @@ def getPlistValue(path, key):
 
 def writeMobileProvisionPList(mobileprovision, plistFile):
     with open(plistFile, "w") as f:
-        r = subprocess.call(["security", "cms", "-D", "-i", mobileprovision], stdout = f)
+        r = subprocess.call(["security", "cms", "-D", "-u0", "-i", mobileprovision], stdout = f)
     if r != 0:
         return False
     return True
@@ -161,6 +160,7 @@ def run(args):
     bundleEmbeddedMobileProvision = os.path.join(bundlePath, "embedded.mobileprovision")
 
     packageApplication = os.path.join(tmpDir, "PackageApplication")
+    packageApplicationOrig = os.path.join(scriptDir, "externals", "PackageApplication", "PackageApplication")
     packageApplicationPatch = os.path.join(scriptDir, "PackageApplication.patch")
 
     # package application needs absolute path:
@@ -211,8 +211,9 @@ def run(args):
         return
 
     log.v("Packaging application...")
-    shutil.copy(PACKAGE_APPLICATION, packageApplication)
+    shutil.copy(packageApplicationOrig, packageApplication)
     subprocess.check_output(["patch", packageApplication, packageApplicationPatch])
+    subprocess.check_output(["chmod", "+x", packageApplication])
     subprocess.check_call([packageApplication, bundlePath, "-s", signingIdentity, "-o", ipaTarget, "--embed", mobileprovision])
     log.v("  done")
 
