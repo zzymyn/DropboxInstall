@@ -1,4 +1,7 @@
-155,157c155,156
+17,18d16
+< print "\n\n\nwarning: PackageApplication is deprecated, use `xcodebuild -exportArchive` instead.\n\n\n";
+< 
+157,159c155,156
 <     my @codesign_args = ("/usr/bin/codesign", "--force", "--preserve-metadata=identifier,entitlements,resource-rules",
 <                          "--sign", $opt{sign},
 <                          "--resource-rules=$destApp/ResourceRules.plist");
